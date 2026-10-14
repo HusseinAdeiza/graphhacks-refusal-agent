@@ -20,10 +20,10 @@ from agent.replay import replay, list_requests
 # KyberSwap, Cream and Beanstalk.
 MUST_BLOCK = ["bZx", "KyberSwapPool", "CreamFinance", "EulerFinance",
               "MangoMarkets", "RoninBridge", "WormholeNft", "Beanstalk",
-              "TheDAO", "PolyBridge"]
-# Assume the big lending/AMM protocols come out clean.
+              "TheDAO", "PolyBridge", "AaveV3Pool", "BalancerVault"]
+# Clean protocols: no call path reaches a vulnerability with a real exploit.
 MUST_PASS = ["UniswapV2Router02", "UniswapV3Router2", "OpenSeaSeaport",
-             "GMXExchange", "AaveV3Pool", "BalancerVault"]
+             "GMXExchange"]
 
 
 def counts(g):
