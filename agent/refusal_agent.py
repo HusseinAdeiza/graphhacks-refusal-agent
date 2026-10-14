@@ -32,6 +32,29 @@ from data.seed import connect, GRAPH
 
 MAX_HOPS = 6
 
+# ---------------------------------------------------------------------------
+# The Cypher the agent depends on. Each query is annotated with WHY it is a
+# graph query — these three do work no lookup can do.
+# ---------------------------------------------------------------------------
+
+# TRAVERSE: walk CALLS outward from one function to any function up to
+# MAX_HOPS away. A variable-length path is a traversal — the answer is the
+# whole set of routes, not one row per pair. SQL would need a recursive CTE
+# and still not give us the path lists in one shot.
+#
+# FalkorDB dialect note: the hop bound must be a LITERAL in the pattern —
+# `[e:CALLS*1..$hops]` fails with "Encountered unhandled type in inlined
+# properties". We expand it from Python (validated integer) instead.
+def q_traverse(hops: int) -> str:
+    if not isinstance(hops, int) or hops < 1:
+        raise ValueError("hops must be a positive integer")
+    return f"""
+MATCH p = (a:Function {{name: $fn}})-[e:CALLS*1..{hops}]->(b:Function)
+RETURN length(p) AS hops,
+       [n IN nodes(p) | n.name] AS path,
+       [n IN nodes(p) | n.contract] AS contracts
+"""
+
 # What does the contract directly expose? Entry points for the traversal.
 Q_ENTRYPOINTS = """
 MATCH (c:Contract {name: $contract})-[:HAS_FUNCTION]->(f:Function)
@@ -76,4 +99,15 @@ class RefusalAgent:
         """Entry functions of the contract under review."""
         res = self.g.query(Q_ENTRYPOINTS, {"contract": contract})
         return [row[0] for row in res.result_set]
+
+    # -- TRAVERSE ---------------------------------------------------------
+    def traverse(self, fn: str, hops: int = MAX_HOPS) -> list:
+        """Every CALLS path of length 1..hops from fn. Graph work."""
+        res = self.g.query(q_traverse(hops), {"fn": fn})
+        paths = []
+        for row in res.result_set:
+            paths.append(BlockingPath(
+                hops=row[0], path=list(row[1]), contracts=list(row[2]),
+            ))
+        return paths
 
