@@ -159,3 +159,42 @@ FUNCTIONS = {
     "EulerFinance.liquidate": ("EulerFinance", "Liquidate at a cross-chain oracle price", ["AaveV2LendingPool.liquidationCall"], [("SWC-107", "exploit post-mortem", "exploited")]),
 }
 
+LIBRARIES = [
+    dict(name="OpenZeppelin", version="4.x", usage="Upgradeable + security libraries used across Compound, MakerDAO, Balancer, OpenSea"),
+    dict(name="UniswapV2Core", version="1.0", usage="Pair/factory logic cloned by Sushiswap and called by aggregators"),
+    dict(name="UniswapV3Core", version="1.0", usage="Pool + callback infrastructure for V3 routers"),
+    dict(name="Solmate", version="7.x", usage="Token + transfer helpers used by Uniswap V3 ecosystem contracts"),
+    dict(name="AavePeriphery", version="1.x", usage="Flash loan + position helpers around the Aave pool"),
+    dict(name="ChainlinkDataFeeds", version="varies", usage="Price oracles for lending and perp settlement"),
+    dict(name="SafeMultisig", version="1.3", usage="Operator key management for marketplace and CDP integrations"),
+    dict(name="BalancerCore", version="2.x", usage="Weighted pool math shared by the Balancer vault"),
+    dict(name="Gearbox", version="0.4", usage="Leverage vault primitives used by perp and CDP systems"),
+    dict(name="MorphoBlue", version="0.5", usage="Flash-loan-friendly isolated market primitives"),
+]
+
+# (library, contract) edges
+USES_LIBRARY = [
+    ("OpenZeppelin", "CompoundComptroller"), ("OpenZeppelin", "MakerVault"),
+    ("OpenZeppelin", "BalancerVault"), ("OpenZeppelin", "OpenSeaSeaport"),
+    ("OpenZeppelin", "AaveV2LendingPool"), ("OpenZeppelin", "KyberSwapPool"),
+    ("UniswapV2Core", "UniswapV2Router02"), ("UniswapV2Core", "SushiswapRouter02"),
+    ("UniswapV2Core", "1inchv3"),
+    ("UniswapV3Core", "UniswapV3Router2"),
+    ("Solmate", "UniswapV3Router2"), ("Solmate", "GMXExchange"),
+    ("AavePeriphery", "AaveV3Pool"), ("AavePeriphery", "AaveV2LendingPool"),
+    ("ChainlinkDataFeeds", "GMXExchange"), ("ChainlinkDataFeeds", "KyberSwapPool"),
+    ("ChainlinkDataFeeds", "MangoMarkets"), ("ChainlinkDataFeeds", "EulerFinance"),
+    ("ChainlinkDataFeeds", "bZx"), ("ChainlinkDataFeeds", "1inchv3"),
+    ("SafeMultisig", "OpenSeaSeaport"), ("SafeMultisig", "MakerVault"),
+    ("BalancerCore", "BalancerVault"),
+    ("Gearbox", "GMXExchange"), ("MorphoBlue", "EulerFinance"),
+]
+
+# (auditor, contract) edges
+AUDITORS = [
+    ("Code4rena", "AaveV3Pool"), ("Code4rena", "OpenSeaSeaport"), ("Code4rena", "BalancerVault"),
+    ("Sherlock", "1inchv3"), ("Sherlock", "BalancerVault"), ("Sherlock", "GMXExchange"),
+    ("Trail of Bits", "UniswapV3Router2"), ("Trail of Bits", "AaveV2LendingPool"),
+    ("OpenZeppelin", "CompoundComptroller"), ("OpenZeppelin", "MakerVault"),
+    ("ConsensysDiligence", "UniswapV2Router02"), ("ConsensysDiligence", "BalancerVault"),
+]
