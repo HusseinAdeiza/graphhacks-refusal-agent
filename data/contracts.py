@@ -36,3 +36,126 @@ CONTRACTS = [
     dict(name="EulerFinance", address="0x27327c5bbf2f9ce874ba2c2949c63a130d863a42", chain="Ethereum", kind="lending", protocol="Euler Finance"),
 ]
 
+# function_name -> (contract_name, description, calls, vulns)
+FUNCTIONS = {
+    # TheDAO
+    "TheDAO.withdraw": ("TheDAO", "Share withdrawal; the fallback re-entry path", ["TheDAO.fallback"], [("SWC-107", "exploit post-mortem", "exploited"), ("SWC-102", "source review", "patched")]),
+    "TheDAO.fallback": ("TheDAO", "Recursive token issuance entry", [], [("SWC-104", "exploit post-mortem", "exploited")]),
+    "TheDAO.convertToShares": ("TheDAO", "Weierstrass conversion of ETH to shares", ["TheDAO.withdraw"], [("SWC-113", "source review", "patched")]),
+
+    # Uniswap V2
+    "UniswapV2Router02.swapExactTokensForTokens": ("UniswapV2Router02", "Token-to-token swap via pair route", ["UniswapV2Router02._swap"], [("SWC-103", "slither detector", "pattern")]),
+    "UniswapV2Router02.addLiquidity": ("UniswapV2Router02", "Add liquidity to a pair", [], []),
+    "UniswapV2Router02.removeLiquidity": ("UniswapV2Router02", "Remove liquidity from a pair", [], []),
+    "UniswapV2Router02._swap": ("UniswapV2Router02", "Internal multi-hop swap; pair.swap emits a price that can be warped by large flows", [], [("SWC-106", "exploit analysis", "theoretical")]),
+
+    # Uniswap V3
+    "UniswapV3Router2.exactInputSingle": ("UniswapV3Router2", "Single-hop exact input swap", [], [("SWC-103", "slither detector", "theoretical")]),
+    "UniswapV3Router2.exactInput": ("UniswapV3Router2", "Multi-hop exact input swap", [], []),
+    "UniswapV3Router2.addLiquidity": ("UniswapV3Router2", "Add liquidity to a pool", [], []),
+
+    # Aave V3
+    "AaveV3Pool.supply": ("AaveV3Pool", "Deposit an asset into the pool", [], []),
+    "AaveV3Pool.borrow": ("AaveV3Pool", "Borrow against collateral; health factor from oracle", ["AaveV3Pool.executeOperation"], [("SWC-128", "audit report", "theoretical")]),
+    "AaveV3Pool.liquidationCall": ("AaveV3Pool", "Liquidate undercollateralized positions at oracle prices", ["AaveV3Pool.repay"], [("SWC-128", "audit report", "theoretical")]),
+    "AaveV3Pool.repay": ("AaveV3Pool", "Repay a borrowed position (seize collateral path)", [], []),
+    "AaveV3Pool.flashLoanSimple": ("AaveV3Pool", "Interest-free flash loan with callback", ["AaveV3Pool.executeOperation"], [("SWC-105", "audit report", "pattern")]),
+    "AaveV3Pool.executeOperation": ("AaveV3Pool", "Flash-loan callback executed in the same tx", [], [("SWC-107", "source review", "theoretical")]),
+
+    # Aave V2
+    "AaveV2LendingPool.deposit": ("AaveV2LendingPool", "Deposit to a reserve", [], []),
+    "AaveV2LendingPool.borrow": ("AaveV2LendingPool", "Borrow against collateral", ["AaveV2LendingPool.flashLoan"], [("SWC-128", "audit report", "patched")]),
+    "AaveV2LendingPool.liquidationCall": ("AaveV2LendingPool", "Close unhealthy positions at liquidation rate", ["cUSDC.redeem"], [("SWC-106", "exploit analysis", "theoretical")]),
+    "AaveV2LendingPool.flashLoan": ("AaveV2LendingPool", "Flash loan with callback (v2.0+)", ["AaveV2LendingPool.executeOperation"], [("SWC-105", "audit report", "pattern")]),
+    "AaveV2LendingPool.executeOperation": ("AaveV2LendingPool", "Flash-loan callback executed in the same tx", [], []),
+
+    # Compound
+    "CompoundComptroller.mint": ("CompoundComptroller", "Mint cTokens for an underlying deposit", ["cUSDC.mint"], []),
+    "CompoundComptroller.redeem": ("CompoundComptroller", "Redeem cTokens for the underlying", ["cUSDC.redeem"], []),
+    "CompoundComptroller.liquidateBorrow": ("CompoundComptroller", "Seize collateral and repay borrow at close factor", ["cUSDC.redeem"], [("SWC-128", "exploit analysis", "patched")]),
+    "cUSDC.mint": ("cUSDC", "Deposit USDC and mint cUSDC", [], []),
+    "cUSDC.borrow": ("cUSDC", "Borrow USDC against cUSDC (underlying exposure)", [], []),
+    "cUSDC.redeem": ("cUSDC", "Burn cUSDC and withdraw USDC", [], [("SWC-115", "source review", "patched")]),
+    "cUSDC.exchange": ("cUSDC", "Exchange cUSDC at a calculated rate", [], [("SWC-115", "slither detector", "theoretical")]),
+
+    # Curve
+    "Curve3pool.exchange": ("Curve3pool", "Swap between pool coins at pool price", [], [("SWC-106", "exploit analysis", "theoretical")]),
+    "Curve3pool.deposit": ("Curve3pool", "Deposit coins and mint LP", [], []),
+    "Curve3pool.withdraw": ("Curve3pool", "Burn LP and withdraw coins", [], []),
+
+    # Balancer
+    "BalancerVault.depositSingle": ("BalancerVault", "Single-asset pool deposit", [], []),
+    "BalancerVault.withdrawSingle": ("BalancerVault", "Single-asset pool withdrawal", [], []),
+    "BalancerVault.flashLoan": ("BalancerVault", "Flash loan with onExit callback", ["BalancerVault.onExit"], [("SWC-105", "audit report", "pattern")]),
+    "BalancerVault.onExit": ("BalancerVault", "Flash-loan exit callback executed in the same tx", [], [("SWC-107", "source review", "theoretical")]),
+
+    # MakerDAO
+    "MakerVault.depositETH": ("MakerVault", "Deposit ETH as collateral", [], []),
+    "MakerVault.generateDAI": ("MakerVault", "Mint DAI against collateral", [], []),
+    "MakerVault.liquidate": ("MakerVault", "Cut undercollateralized vaults in the liquidation window", ["AaveV2LendingPool.liquidationCall"], [("SWC-103", "exploit analysis", "theoretical")]),
+    "MakerVault.withdrawETH": ("MakerVault", "Withdraw released collateral", [], []),
+
+    # Sushiswap
+    "SushiswapRouter02.swapExactTokensForTokens": ("SushiswapRouter02", "Swap via SushiPair clone of the V2 router", ["UniswapV2Router02._swap"], [("SWC-103", "slither detector", "pattern")]),
+    "SushiswapRouter02.swapExactTokensForETHSupportingFeeOnTransferTokens": ("SushiswapRouter02", "Fee-on-transfer-aware swap to ETH", [], []),
+    "SushiswapRouter02.addLiquidity": ("SushiswapRouter02", "Add liquidity to a SushiPair", [], []),
+
+    # 1inch
+    "1inchv3.swap": ("1inchv3", "Route a swap across multiple DEXes in one tx", ["UniswapV2Router02.swapExactTokensForTokens", "Curve3pool.exchange", "SushiswapRouter02.swapExactTokensForTokens"], [("SWC-103", "slither detector", "pattern"), ("SWC-125", "slither detector", "theoretical")]),
+    "1inchv3.getBestSwap": ("1inchv3", "Off-chain routed best-path lookup (on-chain verification)", [], []),
+
+    # OpenSea
+    "OpenSeaSeaport.fulfillExactOrder": ("OpenSeaSeaport", "Settle a maker/taker order with consideration transfer", [], [("SWC-125", "audit report", "theoretical")]),
+    "OpenSeaSeaport.executeAllOrders": ("OpenSeaSeaport", "Bundle order execution in a single call", ["OpenSeaSeaport.fulfillExactOrder"], [("SWC-108", "audit report", "theoretical")]),
+
+    # GMX
+    "GMXExchange.openLong": ("GMXExchange", "Open a leveraged long position", [], [("SWC-122", "slither detector", "theoretical")]),
+    "GMXExchange.close": ("GMXExchange", "Close a position and settle PnL at oracle price", [], [("SWC-128", "audit report", "theoretical")]),
+    "GMXExchange.withdraw": ("GMXExchange", "Withdraw collateral from a position", [], []),
+
+    # KyberSwap
+    "KyberSwapPool.convertWithSlippage": ("KyberSwapPool", "Convert token pairs at the pool's last-traded price", ["KyberSwapPool.getAmountsOut"], [("SWC-106", "exploit post-mortem", "exploited")]),
+    "KyberSwapPool.getAmountsOut": ("KyberSwapPool", "Quote from the pool's oracle (last trade)", [], [("SWC-128", "exploit post-mortem", "exploited")]),
+    "KyberSwapPool.addLiquidity": ("KyberSwapPool", "Add liquidity to the pool", [], []),
+
+    # Ronin
+    "RoninBridge.mint": ("RoninBridge", "Mint destination tokens after a validator-verified attestation", ["RoninBridge.verifySignatures"], []),
+    "RoninBridge.burn": ("RoninBridge", "Burn source tokens to emit a cross-chain event", [], []),
+    "RoninBridge.verifySignatures": ("RoninBridge", "5-of-9 validator signature check over the attestation", [], [("SWC-120", "exploit post-mortem", "exploited"), ("SWC-108", "source review", "exploited")]),
+
+    # Poly
+    "PolyBridge.deposit": ("PolyBridge", "Deposit on source chain, emit cross-chain message", [], [("SWC-101", "source review", "patched")]),
+    "PolyBridge.mintOnDestination": ("PolyBridge", "Mint on destination after cross-chain proof", ["PolyBridge.verifySignatures"], []),
+    "PolyBridge.verifySignatures": ("PolyBridge", "Signature check over cross-chain messages (key compromised)", [], [("SWC-120", "exploit post-mortem", "exploited")]),
+
+    # Wormhole
+    "WormholeNft.attest": ("WormholeNft", "Emit a token attestation message", [], []),
+    "WormholeNft.verifySignatures": ("WormholeNft", "Guardian set signature verification over attestations", [], [("SWC-100", "exploit post-mortem", "exploited"), ("SWC-125", "source review", "exploited")]),
+    "WormholeNft.transferToken": ("WormholeNft", "Mint bridged token against a verified attestation", ["WormholeNft.verifySignatures"], []),
+
+    # bZx
+    "bZx.executeTrade": ("bZx", "Flash-loan funded trade execution", ["UniswapV2Router02.swapExactTokensForTokens", "AaveV2LendingPool.borrow"], [("SWC-106", "exploit post-mortem", "exploited"), ("SWC-105", "exploit post-mortem", "exploited")]),
+    "bZx.liquidate": ("bZx", "Liquidate leveraged positions", ["CreamFinance.liquidate"], []),
+
+    # Cream
+    "CreamFinance.flashLoanSimple": ("CreamFinance", "Aave-style flash loan entry", ["cUSDC.borrow", "AaveV2LendingPool.liquidationCall", "cUSDC.mint"], [("SWC-105", "exploit post-mortem", "exploited")]),
+    "CreamFinance.liquidate": ("CreamFinance", "Liquidate unhealthy positions at oracle-derived rate", ["AaveV2LendingPool.liquidationCall"], [("SWC-128", "exploit analysis", "patched")]),
+    "CreamFinance.priceOracle": ("CreamFinance", "Price sourced from a c-token rate (manipulable)", [], [("SWC-128", "exploit post-mortem", "exploited")]),
+    "CreamFinance.mint": ("CreamFinance", "Mint cToken against a deposit", [], []),
+
+    # Mango
+    "MangoMarkets.liquidate": ("MangoMarkets", "Liquidate at oracle mark price (stale after depeg)", ["MangoMarkets.spotPrice"], [("SWC-128", "exploit post-mortem", "exploited")]),
+    "MangoMarkets.spotPrice": ("MangoMarkets", "Spot mark from the price cache", [], [("SWC-128", "source review", "exploited")]),
+    "MangoMarkets.deposit": ("MangoMarkets", "Deposit collateral", [], []),
+
+    # Beanstalk
+    "Beanstalk.sow": ("Beanstalk", "Plant beans (stake) and harvest based on the oracle price", [], [("SWC-122", "exploit analysis", "exploited")]),
+    "Beanstalk.pull": ("Beanstalk", "Pull yield at the current spot-derived price", ["Beanstalk.oracle"], [("SWC-106", "exploit post-mortem", "exploited")]),
+    "Beanstalk.oracle": ("Beanstalk", "Internal oracle fed by the market spot price", [], [("SWC-128", "exploit post-mortem", "exploited")]),
+
+    # Euler
+    "EulerFinance.flashLoan": ("EulerFinance", "Euler flash loan with callback", ["UniswapV2Router02.swapExactTokensForTokens"], [("SWC-107", "exploit post-mortem", "exploited"), ("SWC-128", "exploit post-mortem", "exploited")]),
+    "EulerFinance.borrow": ("EulerFinance", "Borrow at aave-derived price", [], [("SWC-128", "exploit post-mortem", "exploited")]),
+    "EulerFinance.liquidate": ("EulerFinance", "Liquidate at a cross-chain oracle price", ["AaveV2LendingPool.liquidationCall"], [("SWC-107", "exploit post-mortem", "exploited")]),
+}
+
