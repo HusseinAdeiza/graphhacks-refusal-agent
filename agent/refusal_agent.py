@@ -74,6 +74,22 @@ MATCH (c:Contract {name: $contract})-[:HAS_FUNCTION]->(f:Function)
 RETURN f.name ORDER BY f.name
 """
 
+# How risky is the library stack this contract depends on? Library ->
+# Contract -> Function -> Vulnerability -> Exploit: a four-hop join that is
+# trivial in Cypher and a spreadsheet in anything else.
+Q_LIBRARY_CORRELATION = """
+MATCH (c:Contract {name: $contract})-[:USES_LIBRARY]->(l:Library)
+MATCH (other:Contract)-[:USES_LIBRARY]->(l)
+MATCH (other)-[:HAS_FUNCTION]->(of:Function)
+MATCH (of)-[hv:HAS_VULNERABILITY]->(v:Vulnerability)-[:EXPLOITED_BY]->(e:Exploit)
+WHERE hv.status = 'exploited'
+RETURN l.name AS library,
+       collect(DISTINCT e.name) AS exploits_via_library,
+       count(DISTINCT e) AS n_exploits
+ORDER BY n_exploits DESC
+"""
+
+
 @dataclass
 class BlockingPath:
     path: list = field(default_factory=list)
@@ -148,3 +164,90 @@ class RefusalAgent:
             })
         return bool(path.findings)
 
+    # -- library correlation (supporting evidence) -------------------------
+    def correlate_library(self, contract: str) -> list:
+        res = self.g.query(Q_LIBRARY_CORRELATION, {"contract": contract})
+        return [
+            {"library": row[0], "exploits": row[1], "n_exploits": row[2]}
+            for row in res.result_set
+        ]
+
+    # -- the full loop -----------------------------------------------------
+    def review(self, contract: str) -> Decision:
+        entrypoints = self.observe(contract)
+        if not entrypoints:
+            return Decision(contract=contract, verdict="BLOCKED",
+                            reason=f"contract '{contract}' is not in the graph; "
+                                   "nothing to certify from",
+                            request_id=self._new_id(), filed_at=_now())
+
+        all_paths = []
+        for fn in entrypoints:
+            all_paths.extend(self.traverse(fn))
+
+        blocking = []
+        for p in all_paths:
+            if self.detect(p):
+                blocking.append(p)
+
+        exploits_matched = sorted({
+            e for p in blocking for f in p.findings for e in f["exploits"]
+        })
+        lib = self.correlate_library(contract)
+
+        if blocking:
+            reason = (
+                f"{len(blocking)} of {len(all_paths)} call paths reach a "
+                f"function with a vulnerability whose SWC was used in a real "
+                f"exploit ({', '.join(exploits_matched)}). Certification "
+                "refused until these paths are closed."
+            )
+            verdict = "BLOCKED"
+        else:
+            reason = (f"{len(all_paths)} call paths traversed; none reach a "
+                      "vulnerability pattern used in a real exploit.")
+            verdict = "CERTIFIED"
+
+        d = Decision(
+            contract=contract,
+            verdict=verdict,
+            reason=reason,
+            paths_examined=len(all_paths),
+            paths_blocked=len(blocking),
+            blocking_paths=blocking,
+            exploits_matched=exploits_matched,
+            library_correlation=lib,
+            request_id=self._new_id(),
+            filed_at=_now(),
+        )
+        # The act: the request lands on the graph either way.
+        self.file(d)
+        return d
+
+    @staticmethod
+    def _new_id() -> str:
+        return "CR-" + uuid.uuid4().hex[:10]
+
+
+def main(contracts):
+    agent = RefusalAgent()
+    results = []
+    for c in contracts:
+        d = agent.review(c)
+        results.append(d)
+        print(f"[{d.verdict}] {d.contract}: {d.reason}")
+        if d.verdict == "BLOCKED":
+            top = max(d.blocking_paths, key=lambda p: len(p.findings))
+            print(f"  strongest path ({top.hops} hops): {' -> '.join(top.path)}")
+            for f in top.findings:
+                losses = sum(f["losses"]) if f["losses"] else 0
+                print(f"    - {f['function']}: {f['swc']} {f['title']} "
+                      f"[{f['status']}] via {', '.join(f['exploits']) or 'no known exploit'} "
+                      f"(${losses:,.0f} known loss)")
+    return results
+
+
+if __name__ == "__main__":
+    # A small review batch: two exploited protocols (must BLOCK), two
+    # modern audited ones (expected to pass with no exploited-pattern paths).
+    main(["bZx", "KyberSwapPool", "UniswapV2Router02", "OpenSeaSeaport"])
