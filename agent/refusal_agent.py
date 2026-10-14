@@ -55,6 +55,19 @@ RETURN length(p) AS hops,
        [n IN nodes(p) | n.contract] AS contracts
 """
 
+# DETECT: for a path we already walked, which nodes carry a vulnerability
+# that a REAL EXPLOIT used? This is a two-hop join (Function ->
+# Vulnerability -> Exploit) evaluated per node — the join is the query.
+Q_PATH_RISK = """
+UNWIND $path AS fname
+MATCH (f:Function {name: fname})-[hv:HAS_VULNERABILITY]->(v:Vulnerability)
+WHERE hv.status IN ['exploited', 'pattern']
+OPTIONAL MATCH (v)-[:EXPLOITED_BY]->(e:Exploit)
+RETURN fname, v.swc, v.title, v.severity, hv.status,
+       collect(DISTINCT e.name) AS exploits,
+       collect(DISTINCT e.loss_usd) AS losses
+"""
+
 # What does the contract directly expose? Entry points for the traversal.
 Q_ENTRYPOINTS = """
 MATCH (c:Contract {name: $contract})-[:HAS_FUNCTION]->(f:Function)
@@ -110,4 +123,28 @@ class RefusalAgent:
                 hops=row[0], path=list(row[1]), contracts=list(row[2]),
             ))
         return paths
+
+    # -- DETECT -----------------------------------------------------------
+    def detect(self, path: BlockingPath) -> bool:
+        """Does any node on this path carry a vulnerability that a REAL
+        EXPLOIT used? Fills path.findings and returns True if so.
+
+        The blocking evidence is specifically a vulnerability whose SWC has an
+        EXPLOITED_BY edge — a vulnerability that actually appears in a real
+        exploit. A 'pattern' status with no exploit behind it is theoretical
+        noise, not blocking evidence, and is filtered out here.
+        """
+        res = self.g.query(Q_PATH_RISK, {"path": path.path})
+        path.findings = []
+        for row in res.result_set:
+            exploits = [e for e in row[5] if e]
+            if not exploits:
+                continue  # no real exploit used this pattern -> not blocking
+            path.findings.append({
+                "function": row[0], "swc": row[1], "title": row[2],
+                "severity": row[3], "status": row[4],
+                "exploits": exploits,
+                "losses": [l for l in row[6] if l],
+            })
+        return bool(path.findings)
 
