@@ -224,6 +224,60 @@ class RefusalAgent:
         self.file(d)
         return d
 
+    # -- ACT + RECORD ------------------------------------------------------
+    def file(self, d: Decision) -> None:
+        """File the CertificationRequest node on the graph. Replayable.
+
+        One request per (contract, verdict, agent): re-reviewing a contract
+        with the same verdict updates the existing node rather than piling up
+        duplicates, and the BLOCKED_BY_PATH edges are reset each time so the
+        evidence always matches the current decision.
+        """
+        evidence = json.dumps({
+            "paths_blocked": [
+                {
+                    "path": p.path,
+                    "hops": p.hops,
+                    "findings": p.findings,
+                }
+                for p in d.blocking_paths
+            ],
+            "paths_examined": d.paths_examined,
+        })
+        self.g.query(
+            """
+            MATCH (c:Contract {name: $contract})
+            MERGE (r:CertificationRequest {contract: $contract, agent_id: $agent, status: $status})
+            SET r.request_id = $rid, r.reason = $reason,
+                r.paths_examined = $examined, r.paths_blocked = $blocked,
+                r.exploits_matched = $exploits, r.filed_at = $filed,
+                r.evidence_json = $evidence
+            MERGE (r)-[:FILED_AGAINST]->(c)
+            WITH r
+            OPTIONAL MATCH (r)-[old:BLOCKED_BY_PATH]->()
+            DELETE old
+            WITH r
+            UNWIND CASE WHEN size($blocked_paths) = 0 THEN [null] ELSE $blocked_paths END AS bp
+            FOREACH (f IN CASE WHEN bp IS NULL THEN [] ELSE [bp] END |
+                MERGE (f2:Function {name: bp})
+                MERGE (r)-[:BLOCKED_BY_PATH {function: bp}]->(f2)
+            )
+            """,
+            {
+                "contract": d.contract,
+                "rid": d.request_id,
+                "agent": d.agent_id,
+                "status": d.verdict,
+                "reason": d.reason,
+                "examined": d.paths_examined,
+                "blocked": d.paths_blocked,
+                "exploits": d.exploits_matched,
+                "filed": d.filed_at,
+                "evidence": evidence,
+                "blocked_paths": [p.path[-1] for p in d.blocking_paths],
+            },
+        )
+
     @staticmethod
     def _new_id() -> str:
         return "CR-" + uuid.uuid4().hex[:10]
